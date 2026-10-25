@@ -64,7 +64,7 @@ fun DeltaTheme(settings: AppSettings, content: @Composable () -> Unit) {
 /** 由单个种子色派生明/暗两套配色。 */
 fun seedScheme(seedArgb: Long, dark: Boolean): ColorScheme {
     val hsl = FloatArray(3)
-    android.graphics.ColorUtils.colorToHSL(seedArgb.toInt(), hsl)
+    androidx.core.graphics.ColorUtils.colorToHSL(seedArgb.toInt(), hsl)
     val h = hsl[0]
     val s = if (hsl[1] < 0.05f) 0.05f else hsl[1]
 
