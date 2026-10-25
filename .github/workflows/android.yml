@@ -47,8 +47,35 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
+      # 先单独编译，编译错误的行会通过 ::error:: 变成 check-run annotation，
+      # 这样即使拿不到完整日志也能定位到文件和行号
+      - name: Compile Kotlin
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle :app:compileDebugKotlin --stacktrace 2>&1 | tee compile.log
+
+      - name: Report Kotlin errors
+        if: failure()
+        shell: bash
+        run: |
+          (grep -E "^e: " compile.log | head -30 || true) | while IFS= read -r line; do
+            echo "::error title=Kotlin::$line"
+          done
+
       - name: Unit tests
-        run: gradle :app:testDebugUnitTest --stacktrace
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle :app:testDebugUnitTest --stacktrace 2>&1 | tee test.log
+
+      - name: Report failing tests
+        if: failure()
+        shell: bash
+        run: |
+          (grep -E "FAILED|AssertionError|expected:|Caused by:" test.log | head -30 || true) | while IFS= read -r line; do
+            echo "::error title=Test::$line"
+          done
 
       # 测试失败时把 HTML 报告带出来，省得再翻几千行日志
       - name: Upload test report
