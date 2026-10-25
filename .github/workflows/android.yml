@@ -50,6 +50,16 @@ jobs:
       - name: Unit tests
         run: gradle :app:testDebugUnitTest --stacktrace
 
+      # 测试失败时把 HTML 报告带出来，省得再翻几千行日志
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: app/build/reports/tests/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Assemble debug APK
         run: gradle :app:assembleDebug --stacktrace
 

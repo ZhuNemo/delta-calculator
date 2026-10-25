@@ -69,7 +69,7 @@ class Rational private constructor(
     companion object {
         val ZERO: Rational = Rational(BigInteger.ZERO, BigInteger.ONE)
         val ONE: Rational = Rational(BigInteger.ONE, BigInteger.ONE)
-        val TWO: Rational = Rational(BigInteger.TWO, BigInteger.ONE)
+        val TWO: Rational = Rational(BigInteger.valueOf(2), BigInteger.ONE)
         val TEN: Rational = Rational(BigInteger.TEN, BigInteger.ONE)
 
         fun of(n: Long, d: Long = 1L): Rational =
@@ -179,7 +179,7 @@ private fun factorOutSquares(n: BigInteger): Pair<BigInteger, BigInteger> {
     var rest = n.abs()
     var outside = BigInteger.ONE
     var inside = BigInteger.ONE
-    var p = BigInteger.TWO
+    var p = BigInteger.valueOf(2)
     val limit = BigInteger.valueOf(1_000_000)
     while (p.multiply(p) <= rest && p <= limit) {
         var e = 0
@@ -191,7 +191,7 @@ private fun factorOutSquares(n: BigInteger): Pair<BigInteger, BigInteger> {
             if (e / 2 > 0) outside = outside.multiply(p.pow(e / 2))
             if (e % 2 == 1) inside = inside.multiply(p)
         }
-        p = if (p == BigInteger.TWO) BigInteger.valueOf(3) else p.add(BigInteger.TWO)
+        p = if (p == BigInteger.valueOf(2)) BigInteger.valueOf(3) else p.add(BigInteger.valueOf(2))
     }
     inside = inside.multiply(rest)
     return outside to inside

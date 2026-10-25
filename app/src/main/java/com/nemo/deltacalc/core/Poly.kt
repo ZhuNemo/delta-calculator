@@ -57,7 +57,7 @@ class Poly private constructor(private val terms: Map<Long, Rational>) {
 
     operator fun minus(other: Poly): Poly = this + (-other)
 
-    operator fun unaryMinus(): Poly = Poly(terms.mapValues { it.value.negate() })
+    operator fun unaryMinus(): Poly = Poly(terms.mapValues { -it.value })
 
     operator fun times(other: Poly): Poly {
         if (isZero || other.isZero) return ZERO

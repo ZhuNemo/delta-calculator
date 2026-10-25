@@ -100,7 +100,7 @@ fun bigNthRoot(n: BigInteger, k: Int): BigInteger? {
     if (k <= 0) return null
     if (k == 1) return n
     if (n.signum() < 0) return null
-    if (n < BigInteger.TWO) return n
+    if (n < BigInteger.valueOf(2)) return n
     var lo = BigInteger.ZERO
     var hi = BigInteger.ONE.shiftLeft(n.bitLength() / k + 2)
     while (lo <= hi) {

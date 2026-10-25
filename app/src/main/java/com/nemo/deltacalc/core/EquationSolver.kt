@@ -251,7 +251,10 @@ object EquationSolver {
             k2 == BigInteger.ONE.negate() -> "−"
             else -> k2.toString().replace('-', '−')
         }
-        val rootText = "√${r(radicand)}"
+        // √1 = 1，直接不写根号，否则会得到 i√1 这种别扭形式
+        val hasRadical = radicand != Rational.ONE
+        val rootText = if (hasRadical) "√${r(radicand)}" else ""
+        val rootLatex = if (hasRadical) "\\sqrt{${radicand.num}}" else ""
         val bStr = b2.toString().replace('-', '−')
         val hasLead = b2.signum() != 0
 
@@ -266,9 +269,9 @@ object EquationSolver {
         }
 
         val numerator = if (hasLead) {
-            "$bStr \\pm $coefText$iText\\sqrt{${radicand.num}}"
+            "$bStr \\pm $coefText$iText$rootLatex"
         } else {
-            "\\pm $coefText$iText\\sqrt{${radicand.num}}"
+            "\\pm $coefText$iText$rootLatex"
         }
         val latex = if (d2 == BigInteger.ONE) {
             "x = $numerator"
