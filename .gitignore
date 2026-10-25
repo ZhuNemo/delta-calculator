@@ -1,0 +1,25 @@
+# Gradle
+.gradle/
+build/
+
+# Android
+local.properties
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.keystore
+!debug.keystore
+
+# MathLive 运行时资源：由 tools/fetch-mathlive.mjs 拉取，不入库
+app/src/main/assets/mathlive/vendor/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 工作区私有文件
+.workbuddy/
