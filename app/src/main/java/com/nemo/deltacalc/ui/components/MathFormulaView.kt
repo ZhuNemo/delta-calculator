@@ -71,8 +71,12 @@ private class MathWebViewHolder {
 
 /** assets 里的 MathLive 是否已就位（CI 会先跑 fetch 脚本）。 */
 fun mathLiveBundled(context: android.content.Context): Boolean =
+    assetExists(context, "mathlive/bundle.html") ||
+        (assetExists(context, "mathlive/index.html") && assetExists(context, "mathlive/vendor/mathlive.min.js"))
+
+internal fun assetExists(context: android.content.Context, path: String): Boolean =
     runCatching {
-        context.assets.open("mathlive/vendor/mathlive.min.js").close()
+        context.assets.open(path).close()
         true
     }.getOrDefault(false)
 
@@ -80,6 +84,7 @@ fun mathLiveBundled(context: android.content.Context): Boolean =
  * 只读公式显示。没有光标、不弹系统输入法，输入完全交给 Compose 键盘。
  */
 @SuppressLint("SetJavaScriptEnabled")
+@Suppress("DEPRECATION")
 @Composable
 fun MathFormulaView(
     latex: String,
@@ -112,9 +117,19 @@ fun MathFormulaView(
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.allowFileAccess = true
+                // 旧版 WebView 仍认这两个开关，能放宽 file:// 的跨域限制；
+                // API 30+ 会忽略它们，所以真正的解法是下面的单文件 bundle。
+                settings.allowFileAccessFromFileURLs = true
+                settings.allowUniversalAccessFromFileURLs = true
                 // 顶层没有 INTERNET 权限，这里再显式断网，确保页面不会发起任何请求
                 settings.blockNetworkLoads = true
                 settings.cacheMode = WebSettings.LOAD_NO_CACHE
+                settings.textZoom = 100
+                settings.setSupportZoom(false)
+                settings.builtInZoomControls = false
+                settings.displayZoomControls = false
+                settings.loadWithOverviewMode = false
+                settings.useWideViewPort = false
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
                 overScrollMode = View.OVER_SCROLL_NEVER
@@ -123,7 +138,14 @@ fun MathFormulaView(
                         holder.onPageReady(view)
                     }
                 }
-                loadUrl("file:///android_asset/mathlive/index.html")
+                // bundle.html 把 JS/CSS/字体全部内联，不再有任何子资源请求，
+                // 这是 file:// 下 MathLive 能正常排版的关键。
+                val entry = if (assetExists(ctx, "mathlive/bundle.html")) {
+                    "mathlive/bundle.html"
+                } else {
+                    "mathlive/index.html"
+                }
+                loadUrl("file:///android_asset/$entry")
                 holder.attach(this)
             }
         },

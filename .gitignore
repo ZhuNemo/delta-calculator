@@ -16,6 +16,7 @@ captures/
 
 # MathLive 运行时资源：由 tools/fetch-mathlive.mjs 拉取，不入库
 app/src/main/assets/mathlive/vendor/
+app/src/main/assets/mathlive/bundle.html
 
 # OS
 .DS_Store

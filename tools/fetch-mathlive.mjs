@@ -18,7 +18,8 @@ const marker = path.join(vendorDir, 'mathlive.min.js');
 const force = process.argv.includes('--force');
 
 if (fs.existsSync(marker) && !force) {
-  console.log('[mathlive] vendor 已存在，跳过。需要重新拉取请加 --force');
+  console.log('[mathlive] vendor 已存在，跳过下载，只重建派生文件。');
+  buildDerived();
   process.exit(0);
 }
 
@@ -90,3 +91,49 @@ const files = fs.readdirSync(vendorDir);
 console.log(`[mathlive] 已写入 ${path.relative(projectRoot, vendorDir)}：${files.join(', ')}`);
 if (!fs.existsSync(marker)) throw new Error('vendor 里没有 mathlive.min.js，请检查 dist 结构');
 if (!fs.existsSync(path.join(vendorDir, 'fonts'))) throw new Error('vendor 里没有 fonts 目录，公式会缺字');
+
+function buildDerived() {
+// ---------------------------------------------------------------------------
+// 1) 把字体内联成 data URI
+// Android WebView 在 file:// 下会以 CORS 为由拒绝 @font-face 请求，
+// 字体加载不到 MathLive 就不排版，表现为「公式区一片空白」。
+// ---------------------------------------------------------------------------
+const cssPath = path.join(vendorDir, 'mathlive-static.css');
+if (fs.existsSync(cssPath)) {
+  const css = fs.readFileSync(cssPath, 'utf8');
+  let inlined = 0;
+  const embedded = css.replace(/url\((fonts\/[^)]+)\)/g, (match, rel) => {
+    const fontPath = path.join(vendorDir, decodeURIComponent(rel));
+    if (!fs.existsSync(fontPath)) return match;
+    inlined++;
+    return `url(data:font/woff2;base64,${fs.readFileSync(fontPath).toString('base64')})`;
+  });
+  fs.writeFileSync(path.join(vendorDir, 'mathlive-embedded.css'), embedded);
+  console.log(`[mathlive] 内联 ${inlined} 个字体 -> mathlive-embedded.css (${Math.round(embedded.length / 1024)} KB)`);
+}
+
+// ---------------------------------------------------------------------------
+// 2) 生成单文件 bundle.html
+// JS / CSS / 字体全内联，WebView 不再发任何子资源请求，绕开 file:// 的各种限制。
+// ---------------------------------------------------------------------------
+const assetDir = path.join(projectRoot, 'app', 'src', 'main', 'assets', 'mathlive');
+const indexPath = path.join(assetDir, 'index.html');
+const embeddedCss = path.join(vendorDir, 'mathlive-embedded.css');
+if (fs.existsSync(indexPath) && fs.existsSync(embeddedCss)) {
+  let html = fs.readFileSync(indexPath, 'utf8');
+  const css = fs.readFileSync(embeddedCss, 'utf8');
+  const js = fs.readFileSync(path.join(vendorDir, 'mathlive.min.js'), 'utf8');
+  html = html.replace(
+    /<link[^>]*href="vendor\/mathlive-embedded\.css"[^>]*>/,
+    () => `<style>\n${css}\n</style>`,
+  );
+  html = html.replace(
+    /<script[^>]*src="vendor\/mathlive\.min\.js"[^>]*><\/script>/,
+    () => `<script>\n${js.replace(/<\/script/gi, '<\\/script')}\n</script>`,
+  );
+  fs.writeFileSync(path.join(assetDir, 'bundle.html'), html);
+  console.log(`[mathlive] 生成单文件 bundle.html (${Math.round(html.length / 1024)} KB)`);
+}
+}
+
+buildDerived();

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<link rel="stylesheet" href="vendor/mathlive-static.css">
+<link rel="stylesheet" href="vendor/mathlive-embedded.css">
 <style>
   html, body {
     margin: 0;
@@ -14,38 +14,43 @@
   }
   body {
     position: relative;
-    display: flex;
-    align-items: center;
+    /* 中性灰：浅色/深色主题下都能看见占位提示 */
+    color: #888888;
     font-family: system-ui, -apple-system, "Noto Sans SC", sans-serif;
-    color: #e6e1e5;
     -webkit-tap-highlight-color: transparent;
   }
+  /* 不用 flex：个别 WebView 版本里 math-field 在 flex 容器中会塌成 0 宽 */
   #wrap {
-    flex: 1;
-    display: flex;
-    align-items: center;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
     overflow-x: auto;
     overflow-y: hidden;
-    padding: 2px 10px;
+    padding: 4px 10px;
     box-sizing: border-box;
+    white-space: nowrap;
     scrollbar-width: none;
   }
   #wrap::-webkit-scrollbar { display: none; }
   math-field {
-    flex: 0 0 auto;
-    min-width: 100%;
+    display: inline-block;
+    vertical-align: middle;
     border: none;
     outline: none;
     padding: 0;
     background: transparent;
     font-size: 30px;
-    line-height: 1.25;
+    line-height: 1.3;
+    min-height: 42px;
     --caret-color: transparent;
     --selection-background-color: rgba(128, 120, 255, 0.25);
     --contains-highlight-background-color: transparent;
   }
   math-field::part(menu-toggle),
   math-field::part(virtual-keyboard-toggle) { display: none; }
+
   #empty {
     position: absolute;
     left: 14px;
@@ -53,61 +58,181 @@
     transform: translateY(-50%);
     font-size: 15px;
     opacity: 0.38;
+    color: currentColor;
     pointer-events: none;
     transition: opacity .15s ease;
   }
   #empty.hide { opacity: 0; }
+
+  /* MathLive 不可用时的降级显示，保证至少看得见公式 */
+  #fallback {
+    display: none;
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 24px;
+    line-height: 1.35;
+    color: currentColor;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  #diag {
+    display: none;
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 2px;
+    font-size: 10px;
+    line-height: 1.25;
+    color: #ff6b6b;
+    white-space: normal;
+    max-height: 30px;
+    overflow: hidden;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
   <div id="wrap"><math-field id="mf" read-only></math-field></div>
   <div id="empty">输入公式…</div>
+  <div id="fallback"></div>
+  <div id="diag"></div>
 <script src="vendor/mathlive.min.js"></script>
 <script>
 (function () {
   var mf = document.getElementById('mf');
   var wrap = document.getElementById('wrap');
   var empty = document.getElementById('empty');
+  var fallback = document.getElementById('fallback');
+  var diag = document.getElementById('diag');
+
   var ready = false;
   var pending = null;
+  var errors = [];
 
-  mf.readOnly = true;
-  try { mf.mathVirtualKeyboardPolicy = 'manual'; } catch (e) { /* 旧版本忽略 */ }
+  function report(message) {
+    if (errors.length < 4) errors.push(message);
+    if (!diag) return;
+    diag.style.display = 'block';
+    diag.textContent = errors.join(' | ');
+  }
+
+  window.onerror = function (msg, src, line, col) {
+    report('js: ' + msg + ' @' + line + ':' + col);
+    return false;
+  };
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e && e.reason;
+    report('promise: ' + ((r && r.message) || r));
+  });
+
+  function hasSetValue() {
+    return mf && typeof mf.setValue === 'function';
+  }
+
+  function unicodeLatex(src) {
+    if (!src) return '';
+    var s = src;
+    for (var i = 0; i < 8; i++) {
+      var next = s.replace(/\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}/g, '($1)/($2)');
+      if (next === s) break;
+      s = next;
+    }
+    s = s.replace(/\\sqrt\{([^{}]*)\}/g, '√($1)');
+    s = s.replace(/\\left/g, '').replace(/\\right/g, '');
+    s = s.replace(/\\times/g, '×').replace(/\\div/g, '÷').replace(/\\cdot/g, '·');
+    s = s.replace(/\\pm/g, '±').replace(/\\pi/g, 'π');
+    s = s.replace(/\^\{2\}/g, '²').replace(/\^2/g, '²')
+         .replace(/\^\{3\}/g, '³').replace(/\^3/g, '³');
+    s = s.replace(/\\placeholder\{\}/g, '▢');
+    s = s.replace(/\\([a-zA-Z]+)/g, '$1');
+    s = s.replace(/[{}]/g, '');
+    return s;
+  }
 
   function apply(latex, fontSize, color) {
     if (color) {
       document.body.style.color = color;
-      mf.style.color = color;
+      if (mf) mf.style.color = color;
     }
-    if (fontSize) mf.style.fontSize = fontSize + 'px';
-    try {
-      mf.setValue(latex || '');
-    } catch (e) {
-      try { mf.value = latex || ''; } catch (e2) { /* ignore */ }
+    if (fontSize && mf) mf.style.fontSize = fontSize + 'px';
+
+    var rendered = false;
+    if (hasSetValue()) {
+      try {
+        mf.setValue(latex || '');
+        rendered = true;
+      } catch (e) {
+        report('setValue: ' + (e && e.message ? e.message : e));
+      }
     }
+
+    if (!rendered) {
+      fallback.textContent = unicodeLatex(latex);
+      fallback.style.display = 'block';
+      fallback.style.fontSize = ((fontSize || 30) * 0.8) + 'px';
+      if (mf) mf.style.display = 'none';
+      report('MathLive 未就绪，已文本降级；UA=' + navigator.userAgent);
+    } else {
+      fallback.style.display = 'none';
+      if (mf) mf.style.display = 'inline-block';
+    }
+
     var hasContent = !!(latex && latex.length);
     if (empty) empty.classList.toggle('hide', hasContent);
     requestAnimationFrame(function () {
-      wrap.scrollLeft = wrap.scrollWidth;
+      if (wrap) wrap.scrollLeft = wrap.scrollWidth;
+      // setValue 成功但一个像素都没画出来，同样视为失败并降级
+      if (rendered && hasContent && mf && mf.offsetWidth < 8) {
+        fallback.textContent = unicodeLatex(latex);
+        fallback.style.display = 'block';
+        fallback.style.fontSize = ((fontSize || 30) * 0.8) + 'px';
+        mf.style.display = 'none';
+        report('MathLive 宽度为 0，已文本降级；UA=' + navigator.userAgent);
+      }
     });
   }
-
-  window.deltaRender = function (latex, fontSize, color) {
-    if (!ready) { pending = [latex, fontSize, color]; return; }
-    apply(latex, fontSize, color);
-  };
 
   function boot() {
     if (ready) return;
     ready = true;
-    if (pending) { apply(pending[0], pending[1], pending[2]); pending = null; }
+    if (pending) {
+      var p = pending;
+      pending = null;
+      apply(p[0], p[1], p[2]);
+    }
   }
 
+  window.deltaRender = function (latex, fontSize, color) {
+    if (!ready) {
+      pending = [latex, fontSize, color];
+      return;
+    }
+    apply(latex, fontSize, color);
+  };
+
+  window.deltaReady = function () { return ready; };
+
   if (window.customElements && customElements.whenDefined) {
-    customElements.whenDefined('math-field').then(function () { setTimeout(boot, 0); });
+    try {
+      customElements.whenDefined('math-field').then(function () { setTimeout(boot, 0); });
+    } catch (e) {
+      report('whenDefined: ' + e);
+    }
   }
   window.addEventListener('load', function () { setTimeout(boot, 60); });
-  setTimeout(boot, 1200);
+  setTimeout(boot, 800);
+
+  // 兜底：MathLive 没起来也要显示内容，并把原因暴露出来
+  setTimeout(function () {
+    if (!ready) {
+      report('MathLive 超时 (' + (typeof window.MathLive) + ')；UA=' + navigator.userAgent);
+      boot();
+    }
+  }, 3000);
 })();
 </script>
 </body>
